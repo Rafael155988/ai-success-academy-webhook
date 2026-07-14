@@ -1,0 +1,6 @@
+name = "ai-success-academy-webhook"
+type = "javascript"
+compatibility_date = "2024-01-01"
+
+[env.production]
+vars = { TURNSTILE_SITE_KEY = "1x00000000000000000000AA" }
