@@ -290,3 +290,32 @@ threading.Thread(target=monitor, daemon=True).start()
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 10000))
     app.run(host='0.0.0.0', port=port)
+
+# API endpoints para formulário de lead magnet
+@app.route('/api/subscribe', methods=['POST'])
+def subscribe():
+    try:
+        data = request.get_json()
+        email = data.get('email', '').strip()
+        name = data.get('name', '').strip() or 'Visitante'
+        
+        if not email:
+            return jsonify({'error': 'Email é obrigatório'}), 400
+        
+        brevo_api_key = os.getenv('BREVO_API_KEY')
+        url = "https://api.brevo.com/v3/contacts"
+        headers = {"api-key": brevo_api_key, "Content-Type": "application/json"}
+        payload = {"email": email, "firstName": name, "listIds": [2], "updateEnabled": True}
+        
+        response = requests.post(url, headers=headers, json=payload, timeout=10)
+        
+        if response.status_code in [201, 204]:
+            return jsonify({'status': 'success', 'message': 'Inscrito! Verifique seu email em 5 min.'}), 201
+        else:
+            return jsonify({'error': 'Erro ao inscrever'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/lead-magnet')
+def lead_magnet():
+    return """<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Prompt Starter Pack Grátis</title><style>body{font-family:sans-serif;background:#0B1B2E;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}.container{background:white;max-width:500px;padding:40px;border-radius:12px}.badge{display:inline-block;background:#D4AF37;color:#0B1B2E;padding:8px 12px;border-radius:20px;font-size:12px;font-weight:600;margin-bottom:16px}h1{color:#0B1B2E;margin:8px 0}p{color:#666;margin:12px 0}input,button{width:100%;padding:12px;margin:10px 0;border:1px solid #E2DBC8;border-radius:6px;font-size:14px}button{background:#D4AF37;color:#0B1B2E;font-weight:700;cursor:pointer;border:none}button:hover{background:#F0CD63}.message{margin-top:12px;padding:12px;border-radius:6px;display:none}.success{background:#d4edda;color:#155724}.error{background:#f8d7da;color:#721c24}</style></head><body><div class="container"><div class="badge">📥 Grátis</div><h1>Prompt Starter Pack</h1><p>10 prompts prontos para usar! Enviaremos por email em 5 minutos.</p><form id="form"><input type="text" id="name" placeholder="Seu nome (opcional)"><input type="email" id="email" placeholder="seu@email.com" required><button type="submit">Receber Grátis</button><div id="message"></div></form></div><script>document.getElementById('form').addEventListener('submit',async(e)=>{e.preventDefault();const email=document.getElementById('email').value;const name=document.getElementById('name').value;const msg=document.getElementById('message');try{const res=await fetch('/api/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,name})});const data=await res.json();if(res.ok){msg.textContent='✓ Sucesso! Verifique seu email.';msg.className='message success';document.getElementById('form').reset();}else{msg.textContent='✗ '+data.error;msg.className='message error';}}catch(e){msg.textContent='✗ Erro de conexão';msg.className='message error';}});  </script></body></html>"""
