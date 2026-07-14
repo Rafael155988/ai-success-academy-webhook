@@ -1,321 +1,191 @@
-#!/usr/bin/env python3
-"""
-Brevo Email Automation - Render Deployment
-Monitora Lista 2 e dispara sequência de 6 emails com delays automáticos
-+ Notificação de vendas/problemas por email e SMS
-"""
-
-import requests
-import time
-from datetime import datetime, timedelta
 import os
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response
+import requests
+from datetime import datetime
 
 app = Flask(__name__)
 
-# Ler chave da variável de ambiente
-BREVO_API_KEY = os.environ.get("BREVO_API_KEY")
-if not BREVO_API_KEY:
-    raise ValueError("BREVO_API_KEY environment variable not set")
+BREVO_API_KEY = os.getenv("BREVO_API_KEY")
+LISTA_2_ID = 2
 
-BREVO_API_URL = "https://api.brevo.com/v3"
-LIST_ID = 2
-RAFAEL_EMAIL = "rafaeloliveiragomes0@gmail.com"
+LEAD_MAGNET_HTML = """<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prompt Starter Pack Grátis - AI Success Academy</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root { --navy: #0B1B2E; --navy-soft: #122742; --gold: #D4AF37; --gold-bright: #F0CD63; --paper: #F5F1E8; --body-on-dark: #C9D2DE; --muted: #8492A6; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+        body { font-family: 'Inter', sans-serif; background: linear-gradient(135deg, var(--navy) 0%, var(--navy-soft) 100%); color: var(--body-on-dark); min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; }
+        .nav { position: fixed; top: 0; width: 100%; background: rgba(11, 27, 46, 0.92); backdrop-filter: blur(6px); border-bottom: 1px solid #23405F; z-index: 50; padding: 16px 24px; }
+        .nav-content { max-width: 1120px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; }
+        .brand { font-family: 'Fraunces', serif; font-weight: 700; color: #FAF7EF; font-size: 18px; }
+        .brand span { color: var(--gold); }
+        .nav-links { display: flex; gap: 24px; list-style: none; }
+        .nav-links a { color: var(--body-on-dark); text-decoration: none; font-size: 14px; transition: color 0.2s; }
+        .nav-links a:hover { color: var(--gold); }
+        .container { background: white; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); max-width: 600px; width: 100%; padding: 48px 40px; margin-top: 80px; margin-bottom: 40px; }
+        .badge { display: inline-block; background: var(--gold); color: var(--navy); padding: 8px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; text-transform: uppercase; margin-bottom: 20px; letter-spacing: 0.5px; }
+        h1 { font-family: 'Fraunces', serif; color: var(--navy); font-size: 36px; margin-bottom: 12px; line-height: 1.1; font-weight: 700; }
+        .subtitle { color: #666; font-size: 16px; margin-bottom: 32px; line-height: 1.6; }
+        .benefits { background: var(--paper); border-left: 4px solid var(--gold); padding: 20px; border-radius: 8px; margin-bottom: 32px; font-size: 14px; color: var(--navy); }
+        .benefits strong { display: block; color: var(--navy); margin-bottom: 12px; font-weight: 600; }
+        .benefits ul { list-style: none; margin: 0; }
+        .benefits li { padding-left: 24px; position: relative; margin-bottom: 8px; line-height: 1.5; }
+        .benefits li:before { content: "✓"; position: absolute; left: 0; color: var(--gold); font-weight: bold; font-size: 16px; }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; font-size: 14px; font-weight: 600; color: var(--navy); margin-bottom: 8px; }
+        input { width: 100%; padding: 14px 16px; border: 1px solid #E2DBC8; border-radius: 8px; font-size: 16px; font-family: inherit; transition: all 0.2s; color: var(--navy); }
+        input::placeholder { color: var(--muted); }
+        input:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 4px rgba(212, 175, 55, 0.1); }
+        button { width: 100%; padding: 16px 20px; background: var(--gold); color: var(--navy); border: none; border-radius: 8px; font-size: 16px; font-weight: 700; cursor: pointer; transition: all 0.3s; margin-top: 8px; }
+        button:hover:not(:disabled) { background: var(--gold-bright); transform: translateY(-2px); box-shadow: 0 8px 24px rgba(212, 175, 55, 0.3); }
+        button:disabled { background: #ccc; cursor: not-allowed; transform: none; }
+        .message { margin-top: 16px; padding: 14px 16px; border-radius: 8px; font-size: 14px; display: none; border: 1px solid; }
+        .message.success { background: #d4edda; color: #155724; border-color: #c3e6cb; display: block; }
+        .message.error { background: #f8d7da; color: #721c24; border-color: #f5c6cb; display: block; }
+        .footer { color: var(--muted); font-size: 13px; margin-top: 20px; text-align: center; }
+        .footer a { color: var(--gold); text-decoration: none; }
+        .footer a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-content">
+            <div class="brand">AI Success <span>Academy</span></div>
+            <ul class="nav-links">
+                <li><a href="https://blog.theaisuccessacademy.com/">Blog</a></li>
+                <li><a href="https://theaisuccessacademy.com/">Produtos</a></li>
+            </ul>
+        </div>
+    </nav>
 
-# Template IDs para sequência de 6 emails
-EMAILS = {
-    1: {"template_id": 7, "delay_days": 0, "name": "Prompt Pack"},
-    2: {"template_id": 8, "delay_days": 2, "name": "Prompt Chaining"},
-    3: {"template_id": 9, "delay_days": 2, "name": "Blueprint $27"},
-    4: {"template_id": 10, "delay_days": 3, "name": "Marketing $47"},
-    5: {"template_id": 11, "delay_days": 3, "name": "E-commerce $67"},
-    6: {"template_id": 12, "delay_days": 4, "name": "Freelancers $97"},
-}
+    <div class="container">
+        <div class="badge">🎁 Lead Magnet Gratuito</div>
+        <h1>Receba seu Prompt Starter Pack</h1>
+        <p class="subtitle">10 prompts profissionais prontos para usar. Enviaremos por email em menos de 5 minutos.</p>
+        
+        <div class="benefits">
+            <strong>O que você vai receber:</strong>
+            <ul>
+                <li>10 prompts testados e validados</li>
+                <li>Prontos para usar em ChatGPT, Claude e outras IAs</li>
+                <li>PDF editável para sua biblioteca pessoal</li>
+                <li>+ 5 emails com dicas e estratégias exclusivas</li>
+            </ul>
+        </div>
+        
+        <form id="subscribeForm">
+            <div class="form-group">
+                <label for="name">Seu nome (opcional)</label>
+                <input type="text" id="name" name="name" placeholder="Rafael">
+            </div>
+            
+            <div class="form-group">
+                <label for="email">Seu melhor email *</label>
+                <input type="email" id="email" name="email" placeholder="seu@email.com" required>
+            </div>
+            
+            <button type="submit" id="submitBtn">Receber Prompt Pack Grátis</button>
+            <div class="message" id="message"></div>
+            
+            <p class="footer">Sem spam. Você pode desinscrever-se quando quiser. <a href="https://blog.theaisuccessacademy.com/">Voltar ao blog</a></p>
+        </form>
+    </div>
 
-# Template IDs para notificações (venda/problema)
-NOTIFICATION_TEMPLATES = {
-    "sale": 13,        # Template ID 13 - Notificação de Venda
-    "problem": 14,     # Template ID 14 - Notificação de Problema
-}
-
-headers = {"api-key": BREVO_API_KEY, "Content-Type": "application/json"}
-tracked_contacts = {}
-
-# ==================== ENDPOINTS HEALTH ====================
-@app.route('/health', methods=['GET'])
-def health():
-    return {"status": "ok", "timestamp": datetime.now().isoformat()}, 200
-
-@app.route('/status', methods=['GET'])
-def status():
-    return {
-        "status": "running",
-        "contacts_tracked": len(tracked_contacts),
-        "timestamp": datetime.now().isoformat()
-    }, 200
-
-# ==================== ENDPOINT DE VENDA ====================
-@app.route('/webhook/sale', methods=['POST'])
-def webhook_sale():
-    """
-    Recebe notificação de venda
-    POST /webhook/sale
-    {
-        "customer_email": "customer@example.com",
-        "customer_name": "Nome do Cliente",
-        "product_name": "Nome do Produto",
-        "amount": 27.00,
-        "order_id": "12345"
-    }
-    """
-    try:
-        data = request.get_json()
-        customer_email = data.get("customer_email", "")
-        customer_name = data.get("customer_name", "")
-        product_name = data.get("product_name", "")
-        amount = data.get("amount", 0)
-        order_id = data.get("order_id", "")
+    <script>
+        const form = document.getElementById('subscribeForm');
+        const submitBtn = document.getElementById('submitBtn');
+        const message = document.getElementById('message');
         
-        # Enviar email de notificação para Rafael
-        notification_message = f"""
-        Nova Venda!
-        
-        Cliente: {customer_name}
-        Email: {customer_email}
-        Produto: {product_name}
-        Valor: R$ {amount}
-        Pedido ID: {order_id}
-        Data/Hora: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
-        """
-        
-        send_notification_email(
-            RAFAEL_EMAIL,
-            f"🎉 VENDA REALIZADA - {product_name}",
-            notification_message,
-            "sale"
-        )
-        
-        # Log
-        print(f"✅ VENDA NOTIFICADA: {customer_name} - R${amount} - {order_id}")
-        
-        return {
-            "status": "success",
-            "message": "Venda registrada e notificação enviada",
-            "order_id": order_id
-        }, 200
-        
-    except Exception as e:
-        print(f"❌ Erro ao processar venda: {str(e)}")
-        return {"status": "error", "message": str(e)}, 500
-
-# ==================== ENDPOINT DE PROBLEMA ====================
-@app.route('/webhook/problem', methods=['POST'])
-def webhook_problem():
-    """
-    Recebe notificação de problema/erro
-    POST /webhook/problem
-    {
-        "problem_type": "payment_failed",
-        "description": "Descrição do problema",
-        "severity": "high",
-        "customer_email": "customer@example.com",
-        "order_id": "12345"
-    }
-    """
-    try:
-        data = request.get_json()
-        problem_type = data.get("problem_type", "")
-        description = data.get("description", "")
-        severity = data.get("severity", "medium")
-        customer_email = data.get("customer_email", "")
-        order_id = data.get("order_id", "")
-        
-        # Enviar email de notificação para Rafael
-        notification_message = f"""
-        ⚠️ PROBLEMA DETECTADO!
-        
-        Tipo: {problem_type}
-        Severidade: {severity}
-        Descrição: {description}
-        Cliente/Pedido: {customer_email} ({order_id})
-        Data/Hora: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
-        """
-        
-        send_notification_email(
-            RAFAEL_EMAIL,
-            f"⚠️ PROBLEMA - {problem_type.upper()} [{severity.upper()}]",
-            notification_message,
-            "problem"
-        )
-        
-        # Log
-        print(f"⚠️ PROBLEMA NOTIFICADO: {problem_type} - Severidade: {severity}")
-        
-        return {
-            "status": "success",
-            "message": "Problema registrado e notificação enviada"
-        }, 200
-        
-    except Exception as e:
-        print(f"❌ Erro ao processar problema: {str(e)}")
-        return {"status": "error", "message": str(e)}, 500
-
-# ==================== FUNÇÕES DE EMAIL ====================
-def send_email(email, template_id, name=""):
-    try:
-        url = f"{BREVO_API_URL}/smtp/email"
-        payload = {
-            "to": [{"email": email, "name": name}],
-            "templateId": template_id,
-            "params": {"FNAME": name.split()[0] if name else "Visitante"}
-        }
-        response = requests.post(url, headers=headers, json=payload, timeout=10)
-        return response.status_code == 201
-    except:
-        return False
-
-def send_notification_email(email, subject, message, notification_type="sale"):
-    """Envia email de notificação (venda/problema)"""
-    try:
-        url = f"{BREVO_API_URL}/smtp/email"
-        
-        # Se houver um template específico, usar; senão, usar email genérico
-        template_id = NOTIFICATION_TEMPLATES.get(notification_type)
-        
-        if template_id:
-            # Com template
-            payload = {
-                "to": [{"email": email, "name": "Rafael"}],
-                "templateId": template_id,
-                "params": {
-                    "MESSAGE": message,
-                    "SUBJECT": subject
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const email = document.getElementById('email').value.trim();
+            const name = document.getElementById('name').value.trim();
+            
+            if (!email) {
+                message.textContent = '✗ Email é obrigatório';
+                message.className = 'message error';
+                return;
+            }
+            
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Enviando...';
+            message.style.display = 'none';
+            
+            try {
+                const response = await fetch('/api/subscribe', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, name })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    message.textContent = '✓ Sucesso! Verifique seu email em 5 minutos.';
+                    message.className = 'message success';
+                    form.reset();
+                    submitBtn.textContent = 'Receber Prompt Pack Grátis';
+                } else {
+                    message.textContent = '✗ ' + (data.error || 'Erro ao inscrever. Tente novamente.');
+                    message.className = 'message error';
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Receber Prompt Pack Grátis';
                 }
+            } catch (error) {
+                message.textContent = '✗ Erro de conexão. Tente novamente.';
+                message.className = 'message error';
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Receber Prompt Pack Grátis';
             }
-        else:
-            # Sem template - email direto
-            payload = {
-                "to": [{"email": email, "name": "Rafael"}],
-                "subject": subject,
-                "htmlContent": f"<pre>{message}</pre>"
-            }
-        
-        response = requests.post(url, headers=headers, json=payload, timeout=10)
-        success = response.status_code in [201, 200]
-        
-        if success:
-            print(f"✅ Notificação enviada para {email}")
-        else:
-            print(f"❌ Erro ao enviar notificação: {response.status_code}")
-        
-        return success
-    except Exception as e:
-        print(f"❌ Erro ao enviar notificação: {str(e)}")
-        return False
+        });
+    </script>
+</body>
+</html>
+"""
 
-# ==================== FUNÇÕES DE CONTATO ====================
-def get_contacts_from_list():
-    try:
-        url = f"{BREVO_API_URL}/contacts/lists/{LIST_ID}/contacts"
-        response = requests.get(url, headers=headers, params={"limit": 1000}, timeout=10)
-        return response.json().get("contacts", []) if response.status_code == 200 else []
-    except:
-        return []
+@app.route('/lead-magnet', methods=['GET'])
+def lead_magnet():
+    return Response(LEAD_MAGNET_HTML, mimetype='text/html; charset=utf-8')
 
-def track_contact(contact_id, email, name=""):
-    if email not in tracked_contacts:
-        tracked_contacts[email] = {
-            "id": contact_id,
-            "name": name,
-            "added_date": datetime.now(),
-            "sent": {},
-            "status": "Aguardando Email 1"
-        }
-        print(f"📝 Novo contato rastreado: {email}")
-        return True
-    return False
-
-# ==================== PROCESSAMENTO DE SEQUÊNCIA ====================
-def process_sequence():
-    now = datetime.now()
-    for email, data in list(tracked_contacts.items()):
-        if 1 not in data["sent"]:
-            if send_email(email, EMAILS[1]["template_id"], data["name"]):
-                data["sent"][1] = now
-                data["status"] = "Email 1 Enviado"
-        if 1 in data["sent"] and 2 not in data["sent"]:
-            if now >= data["sent"][1] + timedelta(days=2):
-                if send_email(email, EMAILS[2]["template_id"], data["name"]):
-                    data["sent"][2] = now
-                    data["status"] = "Email 2 Enviado"
-        if 2 in data["sent"] and 3 not in data["sent"]:
-            if now >= data["sent"][2] + timedelta(days=2):
-                if send_email(email, EMAILS[3]["template_id"], data["name"]):
-                    data["sent"][3] = now
-                    data["status"] = "Email 3 Enviado"
-        if 3 in data["sent"] and 4 not in data["sent"]:
-            if now >= data["sent"][3] + timedelta(days=3):
-                if send_email(email, EMAILS[4]["template_id"], data["name"]):
-                    data["sent"][4] = now
-                    data["status"] = "Email 4 Enviado"
-        if 4 in data["sent"] and 5 not in data["sent"]:
-            if now >= data["sent"][4] + timedelta(days=3):
-                if send_email(email, EMAILS[5]["template_id"], data["name"]):
-                    data["sent"][5] = now
-                    data["status"] = "Email 5 Enviado"
-        if 5 in data["sent"] and 6 not in data["sent"]:
-            if now >= data["sent"][5] + timedelta(days=4):
-                if send_email(email, EMAILS[6]["template_id"], data["name"]):
-                    data["sent"][6] = now
-                    data["status"] = "Sequência Completa"
-
-def monitor():
-    while True:
-        try:
-            contacts = get_contacts_from_list()
-            for contact in contacts:
-                email = contact.get("email", "")
-                if email:
-                    track_contact(contact.get("id"), email, contact.get("firstName", ""))
-            process_sequence()
-            time.sleep(300)
-        except Exception as e:
-            print(f"❌ Erro no monitor: {str(e)}")
-            time.sleep(60)
-
-# ==================== INICIALIZAÇÃO ====================
-import threading
-threading.Thread(target=monitor, daemon=True).start()
-
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 10000))
-    app.run(host='0.0.0.0', port=port)
-
-# API endpoints para formulário de lead magnet
 @app.route('/api/subscribe', methods=['POST'])
 def subscribe():
     try:
-        data = request.get_json()
+        data = request.json
         email = data.get('email', '').strip()
-        name = data.get('name', '').strip() or 'Visitante'
+        name = data.get('name', '').strip()
         
         if not email:
-            return jsonify({'error': 'Email é obrigatório'}), 400
+            return jsonify({"error": "Email é obrigatório"}), 400
         
-        brevo_api_key = os.getenv('BREVO_API_KEY')
-        url = "https://api.brevo.com/v3/contacts"
-        headers = {"api-key": brevo_api_key, "Content-Type": "application/json"}
-        payload = {"email": email, "firstName": name, "listIds": [2], "updateEnabled": True}
+        if '@' not in email:
+            return jsonify({"error": "Email inválido"}), 400
         
-        response = requests.post(url, headers=headers, json=payload, timeout=10)
+        headers = {"api-key": BREVO_API_KEY, "Content-Type": "application/json"}
+        payload = {"email": email, "listIds": [LISTA_2_ID]}
+        
+        if name:
+            first_name = name.split()[0] if name else ""
+            last_name = " ".join(name.split()[1:]) if len(name.split()) > 1 else ""
+            payload["attributes"] = {"FIRSTNAME": first_name, "LASTNAME": last_name}
+        
+        response = requests.post("https://api.brevo.com/v3/contacts", json=payload, headers=headers, timeout=10)
         
         if response.status_code in [201, 204]:
-            return jsonify({'status': 'success', 'message': 'Inscrito! Verifique seu email em 5 min.'}), 201
+            return jsonify({"success": True, "message": "Inscrito! Verifique seu email em 5 min."}), 201
+        elif response.status_code == 400:
+            return jsonify({"success": True, "message": "Email já estava cadastrado"}), 200
         else:
-            return jsonify({'error': 'Erro ao inscrever'}), 500
+            return jsonify({"error": f"Erro: {response.status_code}"}), 500
+            
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({"error": f"Erro interno: {str(e)}"}), 500
 
-@app.route('/lead-magnet')
-def lead_magnet():
-    return """<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Prompt Starter Pack Grátis</title><style>body{font-family:sans-serif;background:#0B1B2E;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}.container{background:white;max-width:500px;padding:40px;border-radius:12px}.badge{display:inline-block;background:#D4AF37;color:#0B1B2E;padding:8px 12px;border-radius:20px;font-size:12px;font-weight:600;margin-bottom:16px}h1{color:#0B1B2E;margin:8px 0}p{color:#666;margin:12px 0}input,button{width:100%;padding:12px;margin:10px 0;border:1px solid #E2DBC8;border-radius:6px;font-size:14px}button{background:#D4AF37;color:#0B1B2E;font-weight:700;cursor:pointer;border:none}button:hover{background:#F0CD63}.message{margin-top:12px;padding:12px;border-radius:6px;display:none}.success{background:#d4edda;color:#155724}.error{background:#f8d7da;color:#721c24}</style></head><body><div class="container"><div class="badge">📥 Grátis</div><h1>Prompt Starter Pack</h1><p>10 prompts prontos para usar! Enviaremos por email em 5 minutos.</p><form id="form"><input type="text" id="name" placeholder="Seu nome (opcional)"><input type="email" id="email" placeholder="seu@email.com" required><button type="submit">Receber Grátis</button><div id="message"></div></form></div><script>document.getElementById('form').addEventListener('submit',async(e)=>{e.preventDefault();const email=document.getElementById('email').value;const name=document.getElementById('name').value;const msg=document.getElementById('message');try{const res=await fetch('/api/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,name})});const data=await res.json();if(res.ok){msg.textContent='✓ Sucesso! Verifique seu email.';msg.className='message success';document.getElementById('form').reset();}else{msg.textContent='✗ '+data.error;msg.className='message error';}}catch(e){msg.textContent='✗ Erro de conexão';msg.className='message error';}});  </script></body></html>"""
+if __name__ == '__main__':
+    app.run(debug=False)
