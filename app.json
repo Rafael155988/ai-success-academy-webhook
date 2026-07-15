@@ -1,0 +1,23 @@
+{
+  "name": "ai-success-academy-webhook",
+  "description": "Stripe webhook handler for AI Success Academy",
+  "buildpacks": [
+    {
+      "url": "heroku/python"
+    }
+  ],
+  "env": {
+    "STRIPE_SECRET_KEY": {
+      "description": "Your Stripe Secret Key",
+      "required": true
+    },
+    "STRIPE_WEBHOOK_SECRET": {
+      "description": "Your Stripe Webhook Signing Secret",
+      "required": true
+    },
+    "BREVO_API_KEY": {
+      "description": "Your Brevo API Key",
+      "required": true
+    }
+  }
+}
